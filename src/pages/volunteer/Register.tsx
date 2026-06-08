@@ -277,7 +277,7 @@ export default function VolunteerRegister({ isPublic = false }: VolunteerRegiste
 
   const handleBack = () => {
     if (isPublic) {
-      navigate('/login');
+      navigate('/');
     } else {
       navigate(-1);
     }
@@ -1032,7 +1032,7 @@ export default function VolunteerRegister({ isPublic = false }: VolunteerRegiste
               onClick={() => {
                 setShowSuccess(false);
                 if (isPublic) {
-                  navigate('/login');
+                  navigate('/');
                 }
               }}
               className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"

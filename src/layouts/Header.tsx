@@ -36,11 +36,13 @@ export function Header({ title = '2025 夏季运动会智慧管理系统' }: Hea
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const handleNotificationClick = (notification: Notification) => {
     markNotificationAsRead(notification.id);
+    setShowNotificationPanel(false);
+    navigate('/messages', { state: { notificationId: notification.id } });
   };
 
   const getNotificationIcon = (type: Notification['type']) => {

@@ -86,13 +86,19 @@ export interface SecurityPerson {
   contact: string;
 }
 
+export type NotificationType = 'registration' | 'schedule' | 'result' | 'doping' | 'ticket' | 'medical' | 'system';
+
 export interface Notification {
   id: string;
+  recipientId: string;
+  type: NotificationType;
   title: string;
   content: string;
-  type: 'info' | 'warning' | 'urgent' | 'success';
-  read: boolean;
-  date: string;
+  relatedEntityId?: string;
+  relatedEntityType?: string;
+  certificateUrl?: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface TicketOrder {
@@ -286,28 +292,28 @@ export const medicalStaffs: MedicalStaff[] = [
 ];
 
 export const notifications: Notification[] = [
-  { id: 'N001', title: '比赛日程更新', content: '男子100米自由泳决赛时间调整为明天上午9:00，请相关运动员准时参加。', type: 'info', read: false, date: '2026-06-08 08:30' },
-  { id: 'N002', title: '天气预警', content: '今日下午有雷阵雨，请室外场馆做好防雨准备，观众请携带雨具。', type: 'warning', read: false, date: '2026-06-08 09:15' },
-  { id: 'N003', title: '紧急通知', content: '游泳馆发现疑似病例，已启动应急预案，请相关人员配合隔离观察。', type: 'urgent', read: false, date: '2026-06-08 10:20' },
-  { id: 'N004', title: '成绩公告', content: '女子乒乓球单打决赛已结束，中国选手李四获得金牌。', type: 'success', read: true, date: '2026-06-08 11:00' },
-  { id: 'N005', title: '交通管制', content: '明日主体育场周边道路将进行交通管制，请提前规划出行路线。', type: 'info', read: true, date: '2026-06-08 11:30' },
-  { id: 'N006', title: '志愿者通知', content: '请所有场馆志愿者于今日14:00到主体育场会议室参加培训。', type: 'info', read: false, date: '2026-06-08 12:00' },
-  { id: 'N007', title: '兴奋剂检测提醒', content: '请今日获奖运动员于赛后1小时内到兴奋剂检测中心报到。', type: 'warning', read: true, date: '2026-06-08 13:00' },
-  { id: 'N008', title: '票务信息', content: '男子篮球决赛门票已售罄，请关注后续退票信息。', type: 'info', read: true, date: '2026-06-08 14:00' },
-  { id: 'N009', title: '医疗服务升级', content: '运动员村医疗中心已新增运动康复科，提供24小时服务。', type: 'success', read: true, date: '2026-06-08 14:30' },
-  { id: 'N010', title: '安保升级', content: '接上级通知，即日起所有场馆安检等级提升至一级，请配合检查。', type: 'urgent', read: false, date: '2026-06-08 15:00' },
-  { id: 'N011', title: '奖牌榜更新', content: '中国队今日再添3金，以18金继续领跑奖牌榜。', type: 'success', read: true, date: '2026-06-08 16:00' },
-  { id: 'N012', title: '餐饮服务提醒', content: '运动员村餐厅今日新增日韩料理专区，欢迎品尝。', type: 'info', read: true, date: '2026-06-08 16:30' },
-  { id: 'N013', title: '设备故障', content: '体操馆计分板出现故障，技术人员正在紧急维修。', type: 'warning', read: false, date: '2026-06-08 17:00' },
-  { id: 'N014', title: '新闻发布会', content: '今日20:00将在主新闻中心召开男子游泳决赛新闻发布会。', type: 'info', read: true, date: '2026-06-08 17:30' },
-  { id: 'N015', title: '班车调整', content: '运动员村至场馆的班车班次已加密，发车间隔缩短至15分钟。', type: 'success', read: true, date: '2026-06-08 18:00' },
-  { id: 'N016', title: '观众须知', content: '观看比赛时禁止使用闪光灯拍照，请勿携带专业摄像设备。', type: 'warning', read: true, date: '2026-06-08 18:30' },
-  { id: 'N017', title: '失物招领', content: '在游泳馆捡到一个黑色背包，请失主到服务台认领。', type: 'info', read: true, date: '2026-06-08 19:00' },
-  { id: 'N018', title: '医疗紧急事件', content: '一名观众在主体育场突发心脏病，已送医救治，目前情况稳定。', type: 'urgent', read: false, date: '2026-06-08 19:30' },
-  { id: 'N019', title: '文化活动', content: '明晚19:30将在运动员村举办文化交流晚会，欢迎参加。', type: 'info', read: true, date: '2026-06-08 20:00' },
-  { id: 'N020', title: '闭幕彩排', content: '闭幕式第一次彩排在即，请所有演职人员准时到位。', type: 'info', read: false, date: '2026-06-08 20:30' },
-  { id: 'N021', title: '系统维护', content: '票务系统将于今晚23:00-次日01:00进行维护，届时暂停服务。', type: 'warning', read: true, date: '2026-06-08 21:00' },
-  { id: 'N022', title: '反兴奋剂教育', content: '明日10:00将举办反兴奋剂知识讲座，请运动员积极参加。', type: 'info', read: true, date: '2026-06-08 21:30' },
+  { id: 'N001', recipientId: 'all', type: 'schedule', title: '比赛日程更新', content: '男子100米自由泳决赛时间调整为明天上午9:00，请相关运动员准时参加。', relatedEntityId: 'S001', relatedEntityType: 'schedule', isRead: false, createdAt: '2026-06-08T08:30:00+08:00' },
+  { id: 'N002', recipientId: 'all', type: 'system', title: '天气预警', content: '今日下午有雷阵雨，请室外场馆做好防雨准备，观众请携带雨具。', isRead: false, createdAt: '2026-06-08T09:15:00+08:00' },
+  { id: 'N003', recipientId: 'all', type: 'system', title: '紧急通知', content: '游泳馆发现疑似病例，已启动应急预案，请相关人员配合隔离观察。', isRead: false, createdAt: '2026-06-08T10:20:00+08:00' },
+  { id: 'N004', recipientId: 'all', type: 'result', title: '成绩公告', content: '女子乒乓球单打决赛已结束，中国选手李四获得金牌。', relatedEntityId: 'R017', relatedEntityType: 'result', isRead: true, createdAt: '2026-06-08T11:00:00+08:00' },
+  { id: 'N005', recipientId: 'all', type: 'system', title: '交通管制', content: '明日主体育场周边道路将进行交通管制，请提前规划出行路线。', isRead: true, createdAt: '2026-06-08T11:30:00+08:00' },
+  { id: 'N006', recipientId: 'all', type: 'system', title: '志愿者通知', content: '请所有场馆志愿者于今日14:00到主体育场会议室参加培训。', isRead: false, createdAt: '2026-06-08T12:00:00+08:00' },
+  { id: 'N007', recipientId: 'all', type: 'doping', title: '兴奋剂检测提醒', content: '请今日获奖运动员于赛后1小时内到兴奋剂检测中心报到。', relatedEntityId: 'D001', relatedEntityType: 'dopingTest', isRead: true, createdAt: '2026-06-08T13:00:00+08:00' },
+  { id: 'N008', recipientId: 'all', type: 'ticket', title: '票务信息', content: '男子篮球决赛门票已售罄，请关注后续退票信息。', relatedEntityId: 'T001', relatedEntityType: 'ticketOrder', isRead: true, createdAt: '2026-06-08T14:00:00+08:00' },
+  { id: 'N009', recipientId: 'all', type: 'system', title: '医疗服务升级', content: '运动员村医疗中心已新增运动康复科，提供24小时服务。', isRead: true, createdAt: '2026-06-08T14:30:00+08:00' },
+  { id: 'N010', recipientId: 'all', type: 'system', title: '安保升级', content: '接上级通知，即日起所有场馆安检等级提升至一级，请配合检查。', isRead: false, createdAt: '2026-06-08T15:00:00+08:00' },
+  { id: 'N011', recipientId: 'all', type: 'result', title: '奖牌榜更新', content: '中国队今日再添3金，以18金继续领跑奖牌榜。', relatedEntityId: 'R017', relatedEntityType: 'result', isRead: true, createdAt: '2026-06-08T16:00:00+08:00' },
+  { id: 'N012', recipientId: 'all', type: 'system', title: '餐饮服务提醒', content: '运动员村餐厅今日新增日韩料理专区，欢迎品尝。', isRead: true, createdAt: '2026-06-08T16:30:00+08:00' },
+  { id: 'N013', recipientId: 'all', type: 'system', title: '设备故障', content: '体操馆计分板出现故障，技术人员正在紧急维修。', isRead: false, createdAt: '2026-06-08T17:00:00+08:00' },
+  { id: 'N014', recipientId: 'all', type: 'system', title: '新闻发布会', content: '今日20:00将在主新闻中心召开男子游泳决赛新闻发布会。', isRead: true, createdAt: '2026-06-08T17:30:00+08:00' },
+  { id: 'N015', recipientId: 'all', type: 'system', title: '班车调整', content: '运动员村至场馆的班车班次已加密，发车间隔缩短至15分钟。', isRead: true, createdAt: '2026-06-08T18:00:00+08:00' },
+  { id: 'N016', recipientId: 'all', type: 'system', title: '观众须知', content: '观看比赛时禁止使用闪光灯拍照，请勿携带专业摄像设备。', isRead: true, createdAt: '2026-06-08T18:30:00+08:00' },
+  { id: 'N017', recipientId: 'all', type: 'system', title: '失物招领', content: '在游泳馆捡到一个黑色背包，请失主到服务台认领。', isRead: true, createdAt: '2026-06-08T19:00:00+08:00' },
+  { id: 'N018', recipientId: 'all', type: 'medical', title: '医疗紧急事件', content: '一名观众在主体育场突发心脏病，已送医救治，目前情况稳定。', relatedEntityId: 'MR004', relatedEntityType: 'medicalRecord', isRead: false, createdAt: '2026-06-08T19:30:00+08:00' },
+  { id: 'N019', recipientId: 'all', type: 'system', title: '文化活动', content: '明晚19:30将在运动员村举办文化交流晚会，欢迎参加。', isRead: true, createdAt: '2026-06-08T20:00:00+08:00' },
+  { id: 'N020', recipientId: 'all', type: 'system', title: '闭幕彩排', content: '闭幕式第一次彩排在即，请所有演职人员准时到位。', isRead: false, createdAt: '2026-06-08T20:30:00+08:00' },
+  { id: 'N021', recipientId: 'all', type: 'system', title: '系统维护', content: '票务系统将于今晚23:00-次日01:00进行维护，届时暂停服务。', isRead: true, createdAt: '2026-06-08T21:00:00+08:00' },
+  { id: 'N022', recipientId: 'all', type: 'system', title: '反兴奋剂教育', content: '明日10:00将举办反兴奋剂知识讲座，请运动员积极参加。', isRead: true, createdAt: '2026-06-08T21:30:00+08:00' },
 ];
 
 export const ticketOrders: TicketOrder[] = [

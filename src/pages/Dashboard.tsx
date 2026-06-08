@@ -652,7 +652,7 @@ export default function Dashboard() {
                     whileHover={{ x: 4 }}
                     onClick={() => {
                       useAppStore.getState().markNotificationAsRead(notification.id);
-                      navigate('/notifications');
+                      navigate('/messages', { state: { notificationId: notification.id } });
                     }}
                     className="flex gap-3 p-4 rounded-xl bg-slate-50 hover:bg-slate-100 cursor-pointer transition-colors"
                   >

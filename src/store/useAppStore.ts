@@ -47,6 +47,7 @@ import {
 
 interface AppState {
   currentUser: User | null;
+  users: User[];
   athletes: Athlete[];
   events: Event[];
   venues: Venue[];
@@ -63,7 +64,7 @@ interface AppState {
   patrolRoutes: PatrolRoute[];
   crowdHeatmapData: Record<string, HeatmapPoint[]>;
   crowdDensityData: Record<string, { density: number; count: number; timestamp: string }>;
-  login: (role: UserRole) => void;
+  login: (username: string, password: string) => User | null;
   logout: () => void;
   addAthlete: (athlete: Omit<Athlete, 'id' | 'createdAt'>) => void;
   registerAthlete: (athlete: Omit<Athlete, 'id' | 'createdAt'>) => Athlete;
@@ -135,7 +136,7 @@ interface AppState {
   ) => void;
   generateSchedule: (eventId: string, venueId: string, date: string, startTime: string, endTime: string, round: string) => Schedule;
   generateUniqueAthleteId: () => string;
-  checkAgeAndEventConflict: (athleteId: string, eventId: string) => Conflict[];
+  checkAgeAndEventConflict: (athleteId: string, eventId: string, selectedEventIds?: string[]) => Conflict[];
   dispatchMedicalStaff: (medicalRecordId: string, medicalStaffId: string) => void;
   reportInjury: (data: Omit<MedicalRecord, 'id' | 'createdAt' | 'status'>) => MedicalRecord;
   dispatchNearestMedical: (medicalRecordId: string) => { staff: MedicalStaff; distance: number; estimatedTime: number } | null;
@@ -151,6 +152,8 @@ interface AppState {
   updatePatrolRoute: (id: string, route: Partial<PatrolRoute>) => void;
   deletePatrolRoute: (id: string) => void;
   updateCurrentUser: (updates: Partial<User>) => void;
+  approveAthlete: (athleteId: string) => void;
+  rejectAthlete: (athleteId: string, reason: string) => void;
 }
 
 const transformAthlete = (mock: typeof mockAthletes[0]): Athlete => ({
@@ -266,12 +269,14 @@ const transformSecurityPersonnel = (mock: typeof mockSecurityPersons[0]): Securi
 
 const transformNotification = (mock: typeof mockNotifications[0]): Notification => ({
   id: mock.id,
-  recipientId: 'all',
-  type: mock.type === 'info' ? 'system' : mock.type === 'warning' ? 'system' : mock.type === 'urgent' ? 'medical' : 'system',
+  recipientId: mock.recipientId,
+  type: mock.type,
   title: mock.title,
   content: mock.content,
-  isRead: mock.read,
-  createdAt: mock.date,
+  relatedEntityId: mock.relatedEntityId,
+  relatedEntityType: mock.relatedEntityType,
+  isRead: mock.isRead,
+  createdAt: mock.createdAt,
 });
 
 const transformTicketOrder = (mock: typeof mockTicketOrders[0]): TicketOrder => ({
@@ -321,6 +326,16 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       currentUser: null,
+      users: [
+        { id: 'ADMIN001', username: 'admin', role: 'admin', name: '系统管理员', email: 'admin@example.com', phone: '13800000001', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20administrator%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'ATH001', username: 'athlete', role: 'athlete', name: '张三', email: 'athlete@example.com', phone: '13800000002', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20athlete%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'REF001', username: 'referee', role: 'referee', name: '李裁判', email: 'referee@example.com', phone: '13800000003', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20referee%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'VOL001', username: 'volunteer', role: 'volunteer', name: '王志愿者', email: 'volunteer@example.com', phone: '13800000004', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=young%20volunteer%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'SEC001', username: 'security', role: 'security', name: '赵安保', email: 'security@example.com', phone: '13800000005', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=security%20officer%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'MED001', username: 'medical', role: 'medical', name: '钱医生', email: 'medical@example.com', phone: '13800000006', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=doctor%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'AUD001', username: 'audience', role: 'audience', name: '孙观众', email: 'audience@example.com', phone: '13800000007', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=audience%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+        { id: 'DOP001', username: 'doping', role: 'doping', name: '周反兴奋剂专员', email: 'doping@example.com', phone: '13800000008', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20officer%20portrait&image_size=square', createdAt: new Date().toISOString(), status: 'active' },
+      ],
       athletes: mockAthletes.map(transformAthlete),
       events: mockEvents.map(transformEvent),
       venues: mockVenues.map(transformVenue),
@@ -338,98 +353,21 @@ export const useAppStore = create<AppState>()(
       crowdHeatmapData: {},
       crowdDensityData: {},
 
-      login: (role: UserRole) => {
-        const mockUsers: Record<UserRole, User> = {
-          admin: {
-            id: 'ADMIN001',
-            username: 'admin',
-            role: 'admin',
-            name: '系统管理员',
-            email: 'admin@example.com',
-            phone: '13800000001',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20administrator%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          athlete: {
-            id: 'ATH001',
-            username: 'athlete',
-            role: 'athlete',
-            name: '张三',
-            email: 'athlete@example.com',
-            phone: '13800000002',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20athlete%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          referee: {
-            id: 'REF001',
-            username: 'referee',
-            role: 'referee',
-            name: '李裁判',
-            email: 'referee@example.com',
-            phone: '13800000003',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=professional%20referee%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          volunteer: {
-            id: 'VOL001',
-            username: 'volunteer',
-            role: 'volunteer',
-            name: '王志愿者',
-            email: 'volunteer@example.com',
-            phone: '13800000004',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=young%20volunteer%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          security: {
-            id: 'SEC001',
-            username: 'security',
-            role: 'security',
-            name: '赵安保',
-            email: 'security@example.com',
-            phone: '13800000005',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=security%20officer%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          medical: {
-            id: 'MED001',
-            username: 'medical',
-            role: 'medical',
-            name: '钱医生',
-            email: 'medical@example.com',
-            phone: '13800000006',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=doctor%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          audience: {
-            id: 'AUD001',
-            username: 'audience',
-            role: 'audience',
-            name: '孙观众',
-            email: 'audience@example.com',
-            phone: '13800000007',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=audience%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-          doping: {
-            id: 'DOP001',
-            username: 'doping',
-            role: 'doping',
-            name: '周检测员',
-            email: 'doping@example.com',
-            phone: '13800000008',
-            avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=lab%20technician%20portrait&image_size=square',
-            createdAt: new Date().toISOString(),
-            status: 'active',
-          },
-        };
-        set({ currentUser: mockUsers[role] });
+      login: (username: string, password: string) => {
+        if (password !== '123456') {
+          return null;
+        }
+        const user = get().users.find(u => u.username === username && u.status === 'active');
+        if (!user) {
+          const roleUser = get().users.find(u => u.role === username as UserRole && u.status === 'active');
+          if (roleUser) {
+            set({ currentUser: roleUser });
+            return roleUser;
+          }
+          return null;
+        }
+        set({ currentUser: user });
+        return user;
       },
 
       logout: () => set({ currentUser: null }),
@@ -449,17 +387,33 @@ export const useAppStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           status: 'pending',
         };
-        set((state) => ({ athletes: [...state.athletes, newAthlete] }));
-
+        
+        const newUser: User = {
+          id: newAthlete.id,
+          username: athlete.username || newAthlete.athleteId,
+          role: 'athlete',
+          name: athlete.name,
+          email: athlete.email,
+          phone: athlete.phone,
+          avatar: athlete.avatar,
+          createdAt: new Date().toISOString(),
+          status: 'pending',
+        };
+        
+        set((state) => ({ 
+          athletes: [...state.athletes, newAthlete],
+          users: [...state.users, newUser]
+        }));
+        
         get().pushNotification(
           'all',
           'registration',
           '新运动员注册申请',
-          `${newAthlete.name}(${newAthlete.country})提交了注册申请，请审核`,
+          `${athlete.name}提交了运动员注册申请，请及时审核`,
           newAthlete.id,
           'athlete'
         );
-
+        
         return newAthlete;
       },
       updateAthlete: (id, athlete) => {
@@ -910,7 +864,7 @@ export const useAppStore = create<AppState>()(
         return `A${String(maxId + 1).padStart(3, '0')}`;
       },
 
-      checkAgeAndEventConflict: (athleteId, eventId) => {
+      checkAgeAndEventConflict: (athleteId, eventId, selectedEventIds) => {
         const conflicts: Conflict[] = [];
         const { athletes, events, schedules } = get();
         const athlete = athletes.find((a) => a.id === athleteId);
@@ -956,6 +910,39 @@ export const useAppStore = create<AppState>()(
                   affectedEntities: [athleteId, existing.id, newSched.id],
                   severity: 'error',
                 });
+              }
+            }
+          }
+        }
+
+        if (selectedEventIds && selectedEventIds.length > 0) {
+          const otherSelectedEventIds = selectedEventIds.filter(id => id !== eventId);
+          if (otherSelectedEventIds.length > 0) {
+            const newEventSchedules = schedules.filter((s) => s.eventId === eventId);
+            
+            for (const otherEventId of otherSelectedEventIds) {
+              const otherEventSchedules = schedules.filter((s) => s.eventId === otherEventId);
+              
+              for (const newSched of newEventSchedules) {
+                for (const otherSched of otherEventSchedules) {
+                  if (newSched.date === otherSched.date) {
+                    const newStart = parseInt(newSched.startTime.replace(':', ''), 10);
+                    const newEnd = parseInt(newSched.endTime.replace(':', ''), 10);
+                    const otherStart = parseInt(otherSched.startTime.replace(':', ''), 10);
+                    const otherEnd = parseInt(otherSched.endTime.replace(':', ''), 10);
+                    
+                    if (!(newEnd <= otherStart || otherEnd <= newStart)) {
+                      const otherEvent = events.find((e) => e.id === otherEventId);
+                      const currentEvent = events.find((e) => e.id === eventId);
+                      conflicts.push({
+                        type: 'time',
+                        description: `与已选择的"${otherEvent?.name || otherEventId}"在${newSched.date}时间冲突（${newSched.startTime}-${newSched.endTime} vs ${otherSched.startTime}-${otherSched.endTime}）`,
+                        affectedEntities: [athleteId, eventId, otherEventId],
+                        severity: 'error',
+                      });
+                    }
+                  }
+                }
               }
             }
           }
@@ -1249,11 +1236,58 @@ export const useAppStore = create<AppState>()(
           currentUser: state.currentUser ? { ...state.currentUser, ...updates } : null,
         }));
       },
+
+      approveAthlete: (athleteId) => {
+        set((state) => ({
+          athletes: state.athletes.map(a => 
+            a.id === athleteId ? { ...a, status: 'approved' as const } : a
+          ),
+          users: state.users.map(u => 
+            u.id === athleteId ? { ...u, status: 'active' as const } : u
+          )
+        }));
+        
+        const athlete = get().athletes.find(a => a.id === athleteId);
+        if (athlete) {
+          get().pushNotification(
+            athleteId,
+            'registration',
+            '注册申请已通过',
+            `恭喜您，您的运动员注册申请已通过审核，可以开始参赛了！`,
+            athleteId,
+            'athlete'
+          );
+        }
+      },
+
+      rejectAthlete: (athleteId, reason) => {
+        set((state) => ({
+          athletes: state.athletes.map(a => 
+            a.id === athleteId ? { ...a, status: 'rejected' as const } : a
+          ),
+          users: state.users.map(u => 
+            u.id === athleteId ? { ...u, status: 'inactive' as const } : u
+          )
+        }));
+        
+        const athlete = get().athletes.find(a => a.id === athleteId);
+        if (athlete) {
+          get().pushNotification(
+            athleteId,
+            'registration',
+            '注册申请未通过',
+            `很遗憾，您的运动员注册申请未通过。原因：${reason}`,
+            athleteId,
+            'athlete'
+          );
+        }
+      },
     }),
     {
       name: 'app-storage',
       partialize: (state) => ({
         currentUser: state.currentUser,
+        users: state.users,
         athletes: state.athletes,
         events: state.events,
         venues: state.venues,

@@ -117,7 +117,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   useEffect(() => {
     if (!currentUser) {
-      navigate('/login');
+      navigate('/');
       return;
     }
 

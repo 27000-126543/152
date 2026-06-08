@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
@@ -94,6 +94,8 @@ const getCertificateConfig = (notification: Notification) => {
 
 export default function Messages() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const {
     currentUser,
     notifications,
@@ -135,6 +137,8 @@ export default function Messages() {
   });
   const [newMessage, setNewMessage] = useState<Notification | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [downloadingNotification, setDownloadingNotification] = useState<Notification | null>(null);
+  const processedNotificationIdRef = useRef<string | null>(null);
 
   const userNotifications = useMemo(() => {
     if (!currentUser) return [];
@@ -241,6 +245,26 @@ export default function Messages() {
     }
   }, [notifications.length, currentUser, soundEnabled, notificationSettings]);
 
+  useEffect(() => {
+    const state = location.state as { notificationId?: string } | null;
+    if (state?.notificationId && state.notificationId !== processedNotificationIdRef.current) {
+      const notification = notifications.find(n => n.id === state.notificationId);
+      if (notification) {
+        processedNotificationIdRef.current = state.notificationId;
+        setExpandedId(state.notificationId);
+        if (!notification.isRead) {
+          markNotificationAsRead(state.notificationId);
+        }
+        setTimeout(() => {
+          const element = messageRefs.current[state.notificationId!];
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+      }
+    }
+  }, [location.state]);
+
   const handleMarkAsRead = (id: string) => {
     markNotificationAsRead(id);
     showToast('success', '消息已标记为已读');
@@ -310,11 +334,30 @@ export default function Messages() {
   const handleDownloadCertificate = async (notification: Notification) => {
     const certId = `certificate-${notification.id}`;
     try {
+      setDownloadingNotification(notification);
+      showToast('info', '正在生成凭证，请稍候...');
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      let element = document.getElementById(certId);
+      let attempts = 0;
+      while (!element && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        element = document.getElementById(certId);
+        attempts++;
+      }
+      
+      if (!element) {
+        throw new Error('凭证内容渲染失败');
+      }
+      
       await exportToPDF(certId, `${getCertificateConfig(notification).title}-${notification.id}`);
       showToast('success', '凭证下载成功');
     } catch (error) {
       console.error('导出失败:', error);
-      showToast('error', '凭证下载失败');
+      showToast('error', '凭证下载失败，请重试');
+    } finally {
+      setTimeout(() => setDownloadingNotification(null), 500);
     }
   };
 
@@ -666,6 +709,7 @@ export default function Messages() {
                   return (
                     <motion.div
                       key={notification.id}
+                      ref={(el) => { messageRefs.current[notification.id] = el; }}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -100 }}
@@ -1057,6 +1101,12 @@ export default function Messages() {
       >
         {showCertificate && renderCertificate(showCertificate)}
       </Modal>
+
+      {downloadingNotification && (
+        <div style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '800px', height: '1200px' }}>
+          {renderCertificate(downloadingNotification)}
+        </div>
+      )}
     </div>
   );
 }

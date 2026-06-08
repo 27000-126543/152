@@ -29,27 +29,33 @@ export default function Login() {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const handleLogin = (role: UserRole) => {
-    login(role);
-    showToast('success', `欢迎回来，${getRoleName(role)}！`);
-    navigate('/dashboard');
+  const handleRoleLogin = (role: UserRole) => {
+    const user = login(role, '123456');
+    if (user) {
+      showToast('success', `欢迎回来，${user.name}！`);
+      navigate('/dashboard');
+    } else {
+      showToast('error', '登录失败，请检查账号状态');
+    }
   };
 
   const handleFormLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRole) {
-      showToast('warning', '请先选择角色');
-      return;
-    }
     if (!username || !password) {
       showToast('warning', '请输入用户名和密码');
       return;
     }
-    handleLogin(selectedRole);
+    const user = login(username, password);
+    if (user) {
+      showToast('success', `欢迎回来，${user.name}！`);
+      navigate('/dashboard');
+    } else {
+      showToast('error', '用户名或密码错误，或账号未激活');
+    }
   };
 
   const handleQuickLogin = (role: UserRole) => {
-    handleLogin(role);
+    handleRoleLogin(role);
   };
 
   return (
@@ -266,13 +272,7 @@ export default function Login() {
                 type="submit"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                disabled={!selectedRole}
-                className={cn(
-                  'w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2',
-                  selectedRole
-                    ? 'bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:via-amber-700 hover:to-amber-600 shadow-lg shadow-amber-500/30'
-                    : 'bg-slate-300 cursor-not-allowed'
-                )}
+                className="w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:via-amber-700 hover:to-amber-600 shadow-lg shadow-amber-500/30"
               >
                 <LucideIcons.LogIn className="w-5 h-5" />
                 <span>登录系统</span>

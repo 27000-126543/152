@@ -135,7 +135,7 @@ export default function AthleteRegister({ isPublic = false }: AthleteRegisterPro
     const tempAthleteId = 'temp-check-id';
 
     watchedEvents.forEach((eventId) => {
-      const eventConflicts = checkAgeAndEventConflict(tempAthleteId, eventId);
+      const eventConflicts = checkAgeAndEventConflict(tempAthleteId, eventId, watchedEvents);
       eventConflicts.forEach((conflict) => {
         const event = events.find((e) => e.id === eventId);
         if (conflict.type === 'age' && age > 0) {
@@ -252,6 +252,12 @@ export default function AthleteRegister({ isPublic = false }: AthleteRegisterPro
   };
 
   const onSubmit = (data: FormValues) => {
+    if (conflicts.some((c) => c.severity === 'error')) {
+      showToast('error', '存在冲突问题，请解决后再提交');
+      setCurrentStep(3);
+      return;
+    }
+
     const historicalRecords: HistoricalRecord[] = data.historicalRecords.map((record) => ({
       id: record.id || Math.random().toString(36).substr(2, 9),
       eventId: Math.random().toString(36).substr(2, 9),
@@ -341,7 +347,7 @@ export default function AthleteRegister({ isPublic = false }: AthleteRegisterPro
         if (age > 0 && (age < event.ageMin || age > event.ageMax)) return false;
 
         const tempAthleteId = 'temp-check-id';
-        const timeConflicts = checkAgeAndEventConflict(tempAthleteId, event.id).filter(
+        const timeConflicts = checkAgeAndEventConflict(tempAthleteId, event.id, selectedEventIds).filter(
           (c) => c.type === 'time' && selectedEventIds.includes(c.affectedEntities[1])
         );
         if (timeConflicts.length > 0) return false;
@@ -1375,7 +1381,7 @@ export default function AthleteRegister({ isPublic = false }: AthleteRegisterPro
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/')}
                 className="flex items-center gap-2 px-4 py-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               >
                 <LucideIcons.ArrowLeft className="w-4 h-4" />
