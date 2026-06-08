@@ -1,16 +1,21 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import { PageHeader } from '@/components/PageHeader';
-import { calculateAge, generateAthleteId, formatDate } from '@/utils';
+import { calculateAge, generateAthleteId, formatDate, exportToPDF } from '@/utils';
 import { cn } from '@/lib/utils';
 import type { Athlete, Event, HistoricalRecord, Conflict } from '@/types';
+
+interface AthleteRegisterProps {
+  isPublic?: boolean;
+}
 
 const historicalRecordSchema = z.object({
   id: z.string().optional(),
@@ -55,12 +60,16 @@ const countryOptions = [
   { code: 'CAN', name: '加拿大' },
 ];
 
-export default function AthleteRegister() {
+export default function AthleteRegister({ isPublic = false }: AthleteRegisterProps) {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const [registeredAthlete, setRegisteredAthlete] = useState<Athlete | null>(null);
   const [conflicts, setConflicts] = useState<Conflict[]>([]);
   const [recommendedEvents, setRecommendedEvents] = useState<Event[]>([]);
+  const [applicationNo, setApplicationNo] = useState('');
+  const [perConflictRecommendations, setPerConflictRecommendations] = useState<Record<string, Event[]>>({});
+  const pdfContentRef = useRef<HTMLDivElement>(null);
 
   const { events, registerAthlete, checkAgeAndEventConflict, athletes } = useAppStore();
   const { showToast } = useToast();
@@ -146,6 +155,13 @@ export default function AthleteRegister() {
     });
 
     setConflicts(allConflicts);
+
+    const newPerConflictRecs: Record<string, Event[]> = {};
+    allConflicts.forEach((conflict, idx) => {
+      const recs = getRecommendationsForConflict(conflict, watchedEvents);
+      newPerConflictRecs[`${conflict.type}-${idx}`] = recs;
+    });
+    setPerConflictRecommendations(newPerConflictRecs);
 
     const filteredEvents = events.filter((event) => {
       if (event.gender !== 'mixed' && event.gender !== watchedGender) return false;
@@ -264,13 +280,32 @@ export default function AthleteRegister() {
       status: 'pending',
     });
 
+    const appNo = generateApplicationNo();
+    setApplicationNo(appNo);
     setRegisteredAthlete(newAthlete);
     setShowSuccess(true);
     showToast('success', '注册申请已提交，请等待审核');
   };
 
-  const handleDownloadCertificate = () => {
-    showToast('info', '参赛凭证下载功能开发中');
+  const handleDownloadCertificate = async () => {
+    try {
+      const pdfElement = document.getElementById('athlete-application-form');
+      if (!pdfElement) {
+        showToast('error', '无法生成PDF，请重试');
+        return;
+      }
+      await exportToPDF('athlete-application-form', `参赛申请表_${registeredAthlete?.name || applicationNo}`);
+      showToast('success', 'PDF下载成功');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      showToast('error', 'PDF下载失败，请重试');
+    }
+  };
+
+  const generateApplicationNo = (): string => {
+    const date = formatDate(new Date(), 'yyyyMMdd');
+    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    return `APP-${date}-${random}`;
   };
 
   const getConflictIcon = (type: string) => {
@@ -281,6 +316,55 @@ export default function AthleteRegister() {
       venue: LucideIcons.MapPin,
     };
     return iconMap[type] || LucideIcons.AlertTriangle;
+  };
+
+  const getConflictBadgeConfig = (type: string) => {
+    const configMap: Record<string, { label: string; bgColor: string; textColor: string }> = {
+      age: { label: '年龄超限', bgColor: 'bg-red-100', textColor: 'text-red-700' },
+      athlete: { label: '性别不符', bgColor: 'bg-orange-100', textColor: 'text-orange-700' },
+      time: { label: '时间冲突', bgColor: 'bg-purple-100', textColor: 'text-purple-700' },
+      venue: { label: '场地冲突', bgColor: 'bg-yellow-100', textColor: 'text-yellow-700' },
+    };
+    return configMap[type] || { label: '冲突', bgColor: 'bg-gray-100', textColor: 'text-gray-700' };
+  };
+
+  const getRecommendationsForConflict = (conflict: Conflict, selectedEventIds: string[]): Event[] => {
+    const conflictEventId = conflict.affectedEntities[1];
+    const conflictEvent = events.find((e) => e.id === conflictEventId);
+    if (!conflictEvent) return [];
+
+    return events
+      .filter((event) => {
+        if (selectedEventIds.includes(event.id)) return false;
+        if (event.id === conflictEventId) return false;
+        if (event.gender !== 'mixed' && event.gender !== watchedGender) return false;
+        if (age > 0 && (age < event.ageMin || age > event.ageMax)) return false;
+
+        const tempAthleteId = 'temp-check-id';
+        const timeConflicts = checkAgeAndEventConflict(tempAthleteId, event.id).filter(
+          (c) => c.type === 'time' && selectedEventIds.includes(c.affectedEntities[1])
+        );
+        if (timeConflicts.length > 0) return false;
+
+        return true;
+      })
+      .slice(0, 3);
+  };
+
+  const getRecommendationReasons = (event: Event): string[] => {
+    const reasons: string[] = [];
+    if (age > 0 && age >= event.ageMin && age <= event.ageMax) {
+      reasons.push('年龄符合');
+    }
+    if (event.gender === 'mixed' || event.gender === watchedGender) {
+      reasons.push('性别符合');
+    }
+    const conflictEvent = events.find((e) => watchedEvents.includes(e.id));
+    if (conflictEvent && event.category === conflictEvent.category) {
+      reasons.push('同类别');
+    }
+    reasons.push('时间不冲突');
+    return reasons.slice(0, 2);
   };
 
   const renderStepContent = () => {
@@ -630,6 +714,8 @@ export default function AthleteRegister() {
                 <div className="space-y-2">
                   {conflicts.map((conflict, idx) => {
                     const ConflictIcon = getConflictIcon(conflict.type);
+                    const badgeConfig = getConflictBadgeConfig(conflict.type);
+                    const conflictRecs = perConflictRecommendations[`${conflict.type}-${idx}`] || [];
                     return (
                       <div
                         key={idx}
@@ -637,22 +723,35 @@ export default function AthleteRegister() {
                       >
                         <ConflictIcon className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', badgeConfig.bgColor, badgeConfig.textColor)}>
+                              {badgeConfig.label}
+                            </span>
+                          </div>
                           <p className="text-sm text-red-700 font-medium">{conflict.description}</p>
-                          {recommendedEvents.length > 0 && (
+                          {conflictRecs.length > 0 && (
                             <div className="mt-2">
                               <p className="text-xs text-gray-500 mb-1.5">推荐替换项目：</p>
                               <div className="flex flex-wrap gap-2">
-                                {recommendedEvents.map((event) => (
-                                  <button
-                                    key={event.id}
-                                    onClick={() =>
-                                      handleReplaceEvent(conflict.affectedEntities[1], event.id)
-                                    }
-                                    className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium hover:bg-green-200 transition-colors"
-                                  >
-                                    <LucideIcons.RefreshCw className="w-3 h-3" />
-                                    {event.name}
-                                  </button>
+                                {conflictRecs.map((event) => (
+                                  <div key={event.id} className="flex flex-col gap-1">
+                                    <button
+                                      onClick={() =>
+                                        handleReplaceEvent(conflict.affectedEntities[1], event.id)
+                                      }
+                                      className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium hover:bg-green-200 transition-colors"
+                                    >
+                                      <LucideIcons.RefreshCw className="w-3 h-3" />
+                                      {event.name}
+                                    </button>
+                                    <div className="flex flex-wrap gap-1 ml-2">
+                                      {getRecommendationReasons(event).map((reason, ridx) => (
+                                        <span key={ridx} className="text-xs text-gray-400">
+                                          · {reason}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
                             </div>
@@ -674,9 +773,10 @@ export default function AthleteRegister() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {events.map((event) => {
                   const isSelected = watchedEvents.includes(event.id);
-                  const hasConflict = conflicts.some(
+                  const eventConflicts = conflicts.filter(
                     (c) => c.affectedEntities.includes(event.id) && c.severity === 'error'
                   );
+                  const hasConflict = eventConflicts.length > 0;
                   const isAgeValid = age === 0 || (age >= event.ageMin && age <= event.ageMax);
                   const isGenderValid = event.gender === 'mixed' || event.gender === watchedGender;
                   const isDisabled = !isAgeValid || !isGenderValid;
@@ -699,6 +799,26 @@ export default function AthleteRegister() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1 flex-wrap mb-1">
+                            {!isAgeValid && age > 0 && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium" title={`年龄要求: ${event.ageMin}-${event.ageMax}岁，当前年龄: ${age}岁`}>
+                                <LucideIcons.CalendarX className="w-3 h-3" />
+                                年龄超限
+                              </span>
+                            )}
+                            {!isGenderValid && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium" title={`性别要求: ${event.gender === 'male' ? '男子' : event.gender === 'female' ? '女子' : '混合'}`}>
+                                <LucideIcons.UserX className="w-3 h-3" />
+                                性别不符
+                              </span>
+                            )}
+                            {hasConflict && eventConflicts.some(c => c.type === 'time') && (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium" title="与已选项目比赛时间冲突">
+                                <LucideIcons.Clock className="w-3 h-3" />
+                                时间冲突
+                              </span>
+                            )}
+                          </div>
                           <h4 className="font-medium text-gray-900 truncate">{event.name}</h4>
                           <p className="text-xs text-gray-500 mt-1">
                             {event.category} ·{' '}
@@ -708,16 +828,10 @@ export default function AthleteRegister() {
                               ? '女子'
                               : '混合'}
                           </p>
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-2 mt-2" title={`年龄要求: ${event.ageMin}-${event.ageMax}岁，性别要求: ${event.gender === 'male' ? '男子' : event.gender === 'female' ? '女子' : '混合'}`}>
                             <span className="text-xs text-gray-500">
                               年龄: {event.ageMin}-{event.ageMax}岁
                             </span>
-                            {!isAgeValid && age > 0 && (
-                              <span className="text-xs text-red-500">年龄不符</span>
-                            )}
-                            {!isGenderValid && (
-                              <span className="text-xs text-red-500">性别不符</span>
-                            )}
                           </div>
                         </div>
                         {isSelected && !hasConflict && (
@@ -887,154 +1001,197 @@ export default function AthleteRegister() {
     }
   };
 
-  return (
-    <div className="min-h-screen">
-      <PageHeader
-        title="运动员注册"
-        description="填写运动员信息，完成注册流程"
-        icon={LucideIcons.UserPlus}
-        showBackButton
-      />
+  const formContent = (
+    <div className="max-w-5xl mx-auto">
+      <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+        <div className="border-b border-gray-100 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {steps.map((step, index) => {
+                const StepIcon = LucideIcons[step.icon as keyof typeof LucideIcons] as typeof LucideIcons.User;
+                const isActive = currentStep === step.id;
+                const isCompleted = currentStep > step.id;
 
-      <div className="max-w-5xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-          <div className="border-b border-gray-100 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {steps.map((step, index) => {
-                  const StepIcon = LucideIcons[step.icon as keyof typeof LucideIcons] as typeof LucideIcons.User;
-                  const isActive = currentStep === step.id;
-                  const isCompleted = currentStep > step.id;
-
-                  return (
-                    <div key={step.id} className="flex items-center">
+                return (
+                  <div key={step.id} className="flex items-center">
+                    <div
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-xl transition-all',
+                        isActive
+                          ? 'bg-primary-100 text-primary-700'
+                          : isCompleted
+                          ? 'text-green-600'
+                          : 'text-gray-400'
+                      )}
+                    >
                       <div
                         className={cn(
-                          'flex items-center gap-2 px-3 py-2 rounded-xl transition-all',
+                          'w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm',
                           isActive
-                            ? 'bg-primary-100 text-primary-700'
+                            ? 'bg-primary-500 text-white'
                             : isCompleted
-                            ? 'text-green-600'
-                            : 'text-gray-400'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-100 text-gray-500'
                         )}
                       >
-                        <div
-                          className={cn(
-                            'w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm',
-                            isActive
-                              ? 'bg-primary-500 text-white'
-                              : isCompleted
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-100 text-gray-500'
-                          )}
-                        >
-                          {isCompleted ? (
-                            <LucideIcons.Check className="w-4 h-4" />
-                          ) : (
-                            <StepIcon className="w-4 h-4" />
-                          )}
-                        </div>
-                        <span className="hidden sm:inline font-medium text-sm">
-                          {step.name}
-                        </span>
+                        {isCompleted ? (
+                          <LucideIcons.Check className="w-4 h-4" />
+                        ) : (
+                          <StepIcon className="w-4 h-4" />
+                        )}
                       </div>
-                      {index < steps.length - 1 && (
-                        <div
-                          className={cn(
-                            'w-8 sm:w-16 h-1 mx-1 rounded-full transition-colors',
-                            isCompleted ? 'bg-green-500' : 'bg-gray-200'
-                          )}
-                        />
-                      )}
+                      <span className="hidden sm:inline font-medium text-sm">
+                        {step.name}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-              <div className="text-sm text-gray-500">
-                步骤 <span className="font-bold text-primary-600">{currentStep}</span> / 4
-              </div>
+                    {index < steps.length - 1 && (
+                      <div
+                        className={cn(
+                          'w-8 sm:w-16 h-1 mx-1 rounded-full transition-colors',
+                          isCompleted ? 'bg-green-500' : 'bg-gray-200'
+                        )}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
-
-          <div className="p-6">{renderStepContent()}</div>
-
-          <div className="border-t border-gray-100 px-6 py-4 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={handlePrevStep}
-                disabled={currentStep === 1}
-                className={cn(
-                  'flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all',
-                  currentStep === 1
-                    ? 'text-gray-300 cursor-not-allowed'
-                    : 'text-gray-600 hover:bg-gray-200'
-                )}
-              >
-                <LucideIcons.ChevronLeft className="w-4 h-4" />
-                上一步
-              </button>
-
-              {currentStep < 4 ? (
-                <button
-                  type="button"
-                  onClick={handleNextStep}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
-                >
-                  下一步
-                  <LucideIcons.ChevronRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSubmit(onSubmit)}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary-500 to-purple-600 text-white rounded-xl font-medium hover:from-primary-600 hover:to-purple-700 transition-all shadow-lg shadow-primary-500/30"
-                >
-                  <LucideIcons.Send className="w-4 h-4" />
-                  提交注册
-                </button>
-              )}
+            <div className="text-sm text-gray-500">
+              步骤 <span className="font-bold text-primary-600">{currentStep}</span> / 4
             </div>
           </div>
         </div>
+
+        <div className="p-6">{renderStepContent()}</div>
+
+        <div className="border-t border-gray-100 px-6 py-4 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={handlePrevStep}
+              disabled={currentStep === 1}
+              className={cn(
+                'flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all',
+                currentStep === 1
+                  ? 'text-gray-300 cursor-not-allowed'
+                  : 'text-gray-600 hover:bg-gray-200'
+              )}
+            >
+              <LucideIcons.ChevronLeft className="w-4 h-4" />
+              上一步
+            </button>
+
+            {currentStep < 4 ? (
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+              >
+                下一步
+                <LucideIcons.ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit(onSubmit)}
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary-500 to-purple-600 text-white rounded-xl font-medium hover:from-primary-600 hover:to-purple-700 transition-all shadow-lg shadow-primary-500/30"
+              >
+                <LucideIcons.Send className="w-4 h-4" />
+                提交注册
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+    </div>
+  );
 
-      <Modal
-        isOpen={showSuccess}
-        onClose={() => setShowSuccess(false)}
-        className="max-w-md"
-      >
-        <div className="text-center py-6">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 15 }}
-            className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"
-          >
-            <LucideIcons.CheckCircle className="w-12 h-12 text-white" />
-          </motion.div>
+  const successModal = (
+    <Modal
+      isOpen={showSuccess}
+      onClose={() => setShowSuccess(false)}
+      className="max-w-md"
+    >
+      <div className="text-center py-6">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+          className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"
+        >
+          <LucideIcons.CheckCircle className="w-12 h-12 text-white" />
+        </motion.div>
 
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">注册成功！</h3>
-          <p className="text-gray-500 mb-6">
-            您的注册申请已提交，请等待管理员审核
-          </p>
+        <h3 className="text-2xl font-bold text-gray-900 mb-2">注册成功！</h3>
+        <p className="text-gray-500 mb-4">
+          您的注册申请已提交，请等待管理员审核
+        </p>
 
-          {registeredAthlete && (
-            <div className="bg-gray-50 rounded-2xl p-5 mb-6 text-left">
-              <div className="flex items-center gap-4 mb-4">
-                <img
-                  src={registeredAthlete.avatar}
-                  alt={registeredAthlete.name}
-                  className="w-16 h-16 rounded-2xl object-cover"
-                />
-                <div>
-                  <h4 className="font-bold text-gray-900 text-lg">
-                    {registeredAthlete.name}
-                  </h4>
-                  <p className="text-sm text-gray-500">
-                    {registeredAthlete.country} · {registeredAthlete.gender === 'male' ? '男' : '女'} · {registeredAthlete.age}岁
+        {registeredAthlete && (
+          <div className="bg-gray-50 rounded-2xl p-5 mb-4 text-left">
+            <div className="flex items-center gap-4 mb-4">
+              <img
+                src={registeredAthlete.avatar}
+                alt={registeredAthlete.name}
+                className="w-16 h-16 rounded-2xl object-cover"
+              />
+              <div>
+                <h4 className="font-bold text-gray-900 text-lg">
+                  {registeredAthlete.name}
+                </h4>
+                <p className="text-sm text-gray-500">
+                  {registeredAthlete.country} · {registeredAthlete.gender === 'male' ? '男' : '女'} · {registeredAthlete.age}岁
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">申请编号</p>
+                  <p className="font-mono font-bold text-primary-600">
+                    {applicationNo}
                   </p>
                 </div>
+                <div className="bg-white rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">审核状态</p>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                    <LucideIcons.Clock className="w-3 h-3" />
+                    待审核
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <LucideIcons.Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">审核时间说明</p>
+                    <p className="text-xs text-amber-600 mt-0.5">预计1-3个工作日完成审核，请耐心等待</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl p-3">
+                <h5 className="text-xs font-medium text-gray-700 mb-2">登录信息</h5>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">登录账号</p>
+                    <p className="font-mono text-sm font-bold text-gray-900">
+                      {registeredAthlete.athleteId}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-1">初始密码</p>
+                    <p className="font-mono text-sm font-bold text-gray-900">
+                      123456
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  <LucideIcons.AlertCircle className="w-3 h-3 inline mr-1" />
+                  审核通过后可使用上述账号登录，查看申请信息和参赛详情
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1052,25 +1209,241 @@ export default function AthleteRegister() {
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowSuccess(false)}
-              className="flex-1 px-5 py-2.5 border border-gray-200 rounded-xl font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              关闭
-            </button>
-            <button
-              onClick={handleDownloadCertificate}
-              className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
-            >
-              <LucideIcons.Download className="w-4 h-4" />
-              下载凭证
-            </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowSuccess(false)}
+            className="flex-1 px-5 py-2.5 border border-gray-200 rounded-xl font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            关闭
+          </button>
+          <button
+            onClick={handleDownloadCertificate}
+            className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+          >
+            <LucideIcons.Download className="w-4 h-4" />
+            下载凭证
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+
+  const pdfContent = registeredAthlete ? (
+    <div id="athlete-application-form" ref={pdfContentRef} className="absolute left-[-9999px] top-[-9999px] bg-white p-8 w-[800px]">
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">参赛运动员申请表</h1>
+        <p className="text-sm text-gray-500">2026 国际体育盛会</p>
+      </div>
+
+      <div className="border-b border-gray-200 pb-4 mb-6">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-gray-500">申请编号</p>
+            <p className="font-mono font-bold text-gray-900">{applicationNo}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">申请日期</p>
+            <p className="font-medium text-gray-900">{formatDate(new Date(), 'yyyy年MM月dd日')}</p>
           </div>
         </div>
-      </Modal>
+      </div>
+
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <LucideIcons.User className="w-5 h-5 text-primary-500" />
+          运动员基本信息
+        </h2>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-sm text-gray-500">运动员ID</p>
+            <p className="font-mono font-medium text-gray-900">{registeredAthlete.athleteId}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">姓名</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.name}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">性别</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.gender === 'male' ? '男' : '女'}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">出生日期</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.birthDate}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">年龄</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.age}岁</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">国籍</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.country}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">国家代码</p>
+            <p className="font-mono font-medium text-gray-900">{registeredAthlete.countryCode}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">邮箱</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.email}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">电话</p>
+            <p className="font-medium text-gray-900">{registeredAthlete.phone}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+          <LucideIcons.Target className="w-5 h-5 text-blue-500" />
+          参赛项目
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {registeredAthlete.events.map((eventId) => {
+            const event = events.find((e) => e.id === eventId);
+            return (
+              <span
+                key={eventId}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-100 text-primary-700 rounded-full text-sm font-medium"
+              >
+                {event?.name || eventId}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {registeredAthlete.historicalRecords.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <LucideIcons.Trophy className="w-5 h-5 text-amber-500" />
+            历史成绩
+          </h2>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="text-left py-2 px-3 font-medium text-gray-600">项目</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-600">成绩</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-600">日期</th>
+                <th className="text-left py-2 px-3 font-medium text-gray-600">赛事</th>
+                <th className="text-center py-2 px-3 font-medium text-gray-600">破纪录</th>
+              </tr>
+            </thead>
+            <tbody>
+              {registeredAthlete.historicalRecords.map((record, idx) => (
+                <tr key={idx} className="border-b border-gray-100">
+                  <td className="py-2 px-3">{record.eventName}</td>
+                  <td className="py-2 px-3 font-mono">{record.result}</td>
+                  <td className="py-2 px-3">{record.date}</td>
+                  <td className="py-2 px-3">{record.competition}</td>
+                  <td className="py-2 px-3 text-center">{record.isRecord ? '是' : '否'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-8 pt-6 border-t border-gray-200">
+        <div className="grid grid-cols-2 gap-8">
+          <div>
+            <p className="text-sm text-gray-500 mb-1">申请人签名</p>
+            <div className="border-b border-gray-300 h-8" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 mb-1">审核状态</p>
+            <p className="font-medium text-amber-600">待审核</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  if (isPublic) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-amber-400/20 to-transparent rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-tl from-blue-500/20 to-transparent rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-amber-500/5 to-blue-500/5 rounded-full blur-3xl" />
+        </div>
+
+        <header className="relative z-10 border-b border-white/10 bg-white/5 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <button
+                onClick={() => navigate('/login')}
+                className="flex items-center gap-2 px-4 py-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <LucideIcons.ArrowLeft className="w-4 h-4" />
+                返回登录
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/30">
+                  <LucideIcons.Trophy className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-white">2026 国际体育盛会</h1>
+                  <p className="text-xs text-white/60">运动员注册系统</p>
+                </div>
+              </div>
+              <div className="w-24" />
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 relative z-10 py-8 px-4 sm:px-6 lg:px-8 overflow-y-auto">
+          <div className="text-center mb-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 text-primary-300 rounded-full text-sm font-medium mb-4"
+            >
+              <LucideIcons.UserPlus className="w-4 h-4" />
+              运动员在线注册
+            </motion.div>
+            <motion.h2
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-3xl font-bold text-white mb-2"
+            >
+              填写注册信息
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-white/60"
+            >
+              请按照步骤完成运动员注册申请
+            </motion.p>
+          </div>
+          {formContent}
+        </main>
+
+        {successModal}
+        {pdfContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen">
+      <PageHeader
+        title="运动员注册"
+        description="填写运动员信息，完成注册流程"
+        icon={LucideIcons.UserPlus}
+        showBackButton
+      />
+
+      {formContent}
+
+      {successModal}
+      {pdfContent}
     </div>
   );
 }

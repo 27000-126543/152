@@ -169,7 +169,7 @@ export default function Buy() {
   }, [totalPrice, originalPrice]);
 
   useEffect(() => {
-    let start = animatedPrice;
+    const start = animatedPrice;
     const end = totalPrice;
     const duration = 500;
     const startTime = performance.now();

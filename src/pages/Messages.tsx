@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
@@ -46,6 +47,7 @@ const {
   Smartphone,
   Moon,
   Sun,
+  ExternalLink,
 } = LucideIcons;
 
 const typeFilters: { key: NotificationType | 'all'; label: string }[] = [
@@ -91,6 +93,7 @@ const getCertificateConfig = (notification: Notification) => {
 };
 
 export default function Messages() {
+  const navigate = useNavigate();
   const {
     currentUser,
     notifications,
@@ -167,6 +170,34 @@ export default function Messages() {
 
   const isUrgent = (notification: Notification) => {
     return notification.type === 'doping' || notification.type === 'medical';
+  };
+
+  const getNavigatePath = (notification: Notification): string | null => {
+    switch (notification.type) {
+      case 'registration':
+        return '/athlete/list';
+      case 'schedule':
+        return '/schedule/calendar';
+      case 'result':
+        return '/result/ranking';
+      case 'doping':
+        return '/doping/result';
+      case 'ticket':
+        return '/ticket/order';
+      case 'medical':
+        return '/medical/dispatch';
+      default:
+        return null;
+    }
+  };
+
+  const handleNavigateToDetail = (notification: Notification) => {
+    const path = getNavigatePath(notification);
+    if (path) {
+      navigate(path);
+    } else {
+      showToast('info', '暂无相关页面');
+    }
   };
 
   const getRelatedEntity = (notification: Notification) => {
@@ -773,6 +804,16 @@ export default function Messages() {
                                 {renderRelatedEntityInfo(notification)}
 
                                 <div className="mt-4 flex flex-wrap items-center gap-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleNavigateToDetail(notification);
+                                    }}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-xl hover:bg-primary-600 transition-colors shadow-lg shadow-primary-500/25"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                    查看详情
+                                  </button>
                                   {certConfig.canDownload && (
                                     <>
                                       <button

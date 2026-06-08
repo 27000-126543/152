@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { useAppStore } from "@/store/useAppStore";
 import { MainLayout } from "@/layouts/MainLayout";
@@ -25,6 +25,7 @@ import MedicalReport from "@/pages/medical/Report";
 import MedicalDispatch from "@/pages/medical/Dispatch";
 import Messages from "@/pages/Messages";
 import Profile from "@/pages/Profile";
+import Placeholder from "@/pages/Placeholder";
 import { useToast } from "@/components/Toast";
 
 interface ProtectedRouteProps {
@@ -34,6 +35,7 @@ interface ProtectedRouteProps {
 
 function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const currentUser = useAppStore(state => state.currentUser);
+  const location = useLocation();
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -49,7 +51,16 @@ function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   }
 
   if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
-    return <Navigate to="/dashboard" replace />;
+    return (
+      <MainLayout>
+        <Placeholder 
+          title="权限不足" 
+          description="您当前的角色没有权限访问此页面"
+          icon="Lock"
+          featureName={location.pathname}
+        />
+      </MainLayout>
+    );
   }
 
   return <>{children}</>;
@@ -64,6 +75,13 @@ function AppRoutes() {
         path="/" 
         element={currentUser ? <Navigate to="/dashboard" replace /> : <Login />} 
       />
+      <Route 
+        path="/login" 
+        element={currentUser ? <Navigate to="/dashboard" replace /> : <Login />} 
+      />
+      
+      <Route path="/public/athlete-register" element={<AthleteRegister isPublic={true} />} />
+      <Route path="/public/volunteer-register" element={<VolunteerRegister isPublic={true} />} />
       
       <Route element={<ProtectedRoute><MainLayout><Outlet /></MainLayout></ProtectedRoute>}>
         <Route path="/dashboard" element={<Dashboard />} />
@@ -182,7 +200,15 @@ function AppRoutes() {
         } />
       </Route>
       
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={
+        <MainLayout>
+          <Placeholder 
+            title="页面不存在" 
+            description="您访问的页面不存在或已被移除"
+            icon="FileQuestion"
+          />
+        </MainLayout>
+      } />
     </Routes>
   );
 }

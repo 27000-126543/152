@@ -82,56 +82,56 @@ const getStatusLabel = (status: ScheduleStatus): { text: string; className: stri
 const getQuickActions = (role: UserRole): { icon: keyof typeof LucideIcons; label: string; path: string; color: string }[] => {
   const actions: Record<UserRole, { icon: keyof typeof LucideIcons; label: string; path: string; color: string }[]> = {
     admin: [
-      { icon: 'Users', label: '运动员管理', path: '/athletes', color: 'from-blue-500 to-blue-600' },
-      { icon: 'CalendarDays', label: '赛程安排', path: '/schedules', color: 'from-purple-500 to-purple-600' },
-      { icon: 'Trophy', label: '成绩录入', path: '/results', color: 'from-amber-500 to-amber-600' },
-      { icon: 'Building2', label: '场馆管理', path: '/venues', color: 'from-emerald-500 to-emerald-600' },
-      { icon: 'ShieldAlert', label: '安保监控', path: '/security', color: 'from-red-500 to-red-600' },
-      { icon: 'Stethoscope', label: '医疗调度', path: '/medical', color: 'from-rose-500 to-rose-600' },
-      { icon: 'Ticket', label: '票务管理', path: '/tickets', color: 'from-indigo-500 to-indigo-600' },
-      { icon: 'Settings', label: '系统设置', path: '/settings', color: 'from-slate-500 to-slate-600' },
+      { icon: 'Users', label: '运动员管理', path: '/athlete/list', color: 'from-blue-500 to-blue-600' },
+      { icon: 'CalendarDays', label: '赛事编排', path: '/schedule/generate', color: 'from-purple-500 to-purple-600' },
+      { icon: 'Trophy', label: '成绩录入', path: '/result/entry', color: 'from-amber-500 to-amber-600' },
+      { icon: 'FlaskConical', label: '兴奋剂检测', path: '/doping/test', color: 'from-orange-500 to-orange-600' },
+      { icon: 'ShieldAlert', label: '安保热力图', path: '/security/heatmap', color: 'from-red-500 to-red-600' },
+      { icon: 'Stethoscope', label: '医疗调度', path: '/medical/dispatch', color: 'from-rose-500 to-rose-600' },
+      { icon: 'Ticket', label: '票务订单', path: '/ticket/order', color: 'from-indigo-500 to-indigo-600' },
+      { icon: 'HeartHandshake', label: '志愿者管理', path: '/volunteer/manage', color: 'from-emerald-500 to-emerald-600' },
     ],
     athlete: [
-      { icon: 'CalendarCheck', label: '我的赛程', path: '/my-schedule', color: 'from-blue-500 to-blue-600' },
-      { icon: 'Medal', label: '比赛成绩', path: '/my-results', color: 'from-amber-500 to-amber-600' },
-      { icon: 'UserCircle', label: '个人信息', path: '/profile', color: 'from-emerald-500 to-emerald-600' },
-      { icon: 'Heart', label: '健康数据', path: '/health', color: 'from-rose-500 to-rose-600' },
+      { icon: 'CalendarCheck', label: '赛程日历', path: '/schedule/calendar', color: 'from-blue-500 to-blue-600' },
+      { icon: 'Medal', label: '成绩排名', path: '/result/ranking', color: 'from-amber-500 to-amber-600' },
+      { icon: 'UserCircle', label: '个人中心', path: '/profile', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'Trophy', label: '奖牌榜', path: '/result/medal', color: 'from-yellow-500 to-yellow-600' },
     ],
     referee: [
-      { icon: 'ClipboardList', label: '执裁安排', path: '/referee-schedule', color: 'from-blue-500 to-blue-600' },
-      { icon: 'Edit3', label: '录入成绩', path: '/enter-result', color: 'from-amber-500 to-amber-600' },
-      { icon: 'Scale', label: '争议处理', path: '/disputes', color: 'from-purple-500 to-purple-600' },
-      { icon: 'FileCheck', label: '比赛报告', path: '/reports', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'ClipboardList', label: '成绩录入', path: '/result/entry', color: 'from-blue-500 to-blue-600' },
+      { icon: 'CalendarDays', label: '赛程日历', path: '/schedule/calendar', color: 'from-purple-500 to-purple-600' },
+      { icon: 'Trophy', label: '成绩排名', path: '/result/ranking', color: 'from-amber-500 to-amber-600' },
+      { icon: 'UserCircle', label: '个人中心', path: '/profile', color: 'from-emerald-500 to-emerald-600' },
     ],
     volunteer: [
-      { icon: 'MapPin', label: '我的岗位', path: '/my-station', color: 'from-blue-500 to-blue-600' },
-      { icon: 'Clock', label: '考勤打卡', path: '/attendance', color: 'from-emerald-500 to-emerald-600' },
-      { icon: 'BookOpen', label: '培训资料', path: '/training', color: 'from-amber-500 to-amber-600' },
-      { icon: 'MessageSquare', label: '问题反馈', path: '/feedback', color: 'from-rose-500 to-rose-600' },
+      { icon: 'MapPin', label: '岗位分配', path: '/volunteer/manage', color: 'from-blue-500 to-blue-600' },
+      { icon: 'Clock', label: '签到打卡', path: '/volunteer/checkin', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'CalendarDays', label: '赛程日历', path: '/schedule/calendar', color: 'from-amber-500 to-amber-600' },
+      { icon: 'UserCircle', label: '个人中心', path: '/profile', color: 'from-rose-500 to-rose-600' },
     ],
     security: [
-      { icon: 'Map', label: '巡逻路线', path: '/patrol-route', color: 'from-blue-500 to-blue-600' },
-      { icon: 'AlertTriangle', label: '紧急事件', path: '/incidents', color: 'from-red-500 to-red-600' },
-      { icon: 'Users', label: '人员部署', path: '/deployment', color: 'from-emerald-500 to-emerald-600' },
-      { icon: 'Radio', label: '通讯设备', path: '/communication', color: 'from-purple-500 to-purple-600' },
+      { icon: 'Map', label: '巡逻路线', path: '/security/patrol', color: 'from-blue-500 to-blue-600' },
+      { icon: 'ThermometerSun', label: '热力图监控', path: '/security/heatmap', color: 'from-red-500 to-red-600' },
+      { icon: 'CalendarDays', label: '赛程日历', path: '/schedule/calendar', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'UserCircle', label: '个人中心', path: '/profile', color: 'from-purple-500 to-purple-600' },
     ],
     medical: [
-      { icon: 'Ambulance', label: '急救任务', path: '/emergency', color: 'from-red-500 to-red-600' },
-      { icon: 'FileText', label: '医疗记录', path: '/medical-records', color: 'from-blue-500 to-blue-600' },
-      { icon: 'Pill', label: '药品管理', path: '/medications', color: 'from-emerald-500 to-emerald-600' },
-      { icon: 'Activity', label: '健康监测', path: '/health-monitor', color: 'from-rose-500 to-rose-600' },
+      { icon: 'Stethoscope', label: '医疗调度', path: '/medical/dispatch', color: 'from-red-500 to-red-600' },
+      { icon: 'Activity', label: '伤病上报', path: '/medical/report', color: 'from-blue-500 to-blue-600' },
+      { icon: 'CalendarDays', label: '赛程日历', path: '/schedule/calendar', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'UserCircle', label: '个人中心', path: '/profile', color: 'from-rose-500 to-rose-600' },
     ],
     audience: [
-      { icon: 'Ticket', label: '购买门票', path: '/buy-tickets', color: 'from-amber-500 to-amber-600' },
-      { icon: 'Calendar', label: '赛事日程', path: '/event-calendar', color: 'from-blue-500 to-blue-600' },
-      { icon: 'Trophy', label: '奖牌榜', path: '/medal-standings', color: 'from-yellow-500 to-yellow-600' },
-      { icon: 'ShoppingBag', label: '我的订单', path: '/my-orders', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'Ticket', label: '购买门票', path: '/ticket/buy', color: 'from-amber-500 to-amber-600' },
+      { icon: 'CalendarDays', label: '赛程日历', path: '/schedule/calendar', color: 'from-blue-500 to-blue-600' },
+      { icon: 'Trophy', label: '奖牌榜', path: '/result/medal', color: 'from-yellow-500 to-yellow-600' },
+      { icon: 'ShoppingBag', label: '我的订单', path: '/ticket/order', color: 'from-emerald-500 to-emerald-600' },
     ],
     doping: [
-      { icon: 'FlaskConical', label: '检测任务', path: '/testing-tasks', color: 'from-blue-500 to-blue-600' },
-      { icon: 'Search', label: '样本检测', path: '/sample-testing', color: 'from-purple-500 to-purple-600' },
-      { icon: 'FileWarning', label: '异常报告', path: '/abnormal-reports', color: 'from-red-500 to-red-600' },
-      { icon: 'Database', label: '检测记录', path: '/testing-records', color: 'from-emerald-500 to-emerald-600' },
+      { icon: 'FlaskConical', label: '兴奋剂抽检', path: '/doping/test', color: 'from-blue-500 to-blue-600' },
+      { icon: 'FileText', label: '检测结果', path: '/doping/result', color: 'from-purple-500 to-purple-600' },
+      { icon: 'CalendarDays', label: '赛程日历', path: '/schedule/calendar', color: 'from-orange-500 to-orange-600' },
+      { icon: 'UserCircle', label: '个人中心', path: '/profile', color: 'from-emerald-500 to-emerald-600' },
     ],
   };
 
@@ -327,7 +327,7 @@ export default function Dashboard() {
         icon={LucideIcons.LayoutDashboard}
         actions={
           <button
-            onClick={() => navigate('/notifications')}
+            onClick={() => navigate('/messages')}
             className="relative p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors"
           >
             <LucideIcons.Bell className="w-5 h-5 text-slate-600" />
@@ -444,7 +444,7 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-500 mt-0.5">共 {todaySchedules.length} 场比赛</p>
               </div>
               <button
-                onClick={() => navigate('/schedules')}
+                onClick={() => navigate('/schedule/calendar')}
                 className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 查看全部
@@ -466,7 +466,7 @@ export default function Dashboard() {
                       key={schedule.id}
                       whileHover={{ x: 4 }}
                       className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/schedules/${schedule.id}`)}
+                      onClick={() => navigate('/schedule/calendar')}
                     >
                       <div className="text-center min-w-16">
                         <p className="text-lg font-bold text-slate-900">{schedule.startTime}</p>
@@ -500,7 +500,7 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-500 mt-0.5">前5名国家/地区</p>
               </div>
               <button
-                onClick={() => navigate('/medals')}
+                onClick={() => navigate('/result/medal')}
                 className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 完整榜单
@@ -631,7 +631,7 @@ export default function Dashboard() {
                 <p className="text-sm text-slate-500 mt-0.5">{unreadNotifications.length} 条未读</p>
               </div>
               <button
-                onClick={() => navigate('/notifications')}
+                onClick={() => navigate('/messages')}
                 className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 全部

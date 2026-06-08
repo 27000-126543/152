@@ -4,13 +4,18 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import { PageHeader } from '@/components/PageHeader';
-import { formatDate } from '@/utils';
+import { formatDate, exportToPDF } from '@/utils';
 import { cn } from '@/lib/utils';
 import type { Volunteer, AssignResult, TimeSlot } from '@/types';
+
+interface VolunteerRegisterProps {
+  isPublic?: boolean;
+}
 
 const skillOptions = [
   { value: 'translation', label: '翻译', icon: 'Languages', color: 'bg-blue-100 text-blue-700 border-blue-200' },
@@ -59,15 +64,26 @@ const steps = [
   { id: 3, name: '可用时段', icon: 'Calendar' },
 ];
 
-export default function VolunteerRegister() {
+function generateApplicationNo(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `VOL-${year}${month}${day}-${random}`;
+}
+
+export default function VolunteerRegister({ isPublic = false }: VolunteerRegisterProps) {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showMatchResult, setShowMatchResult] = useState(false);
   const [registeredVolunteer, setRegisteredVolunteer] = useState<Volunteer | null>(null);
   const [matchResults, setMatchResults] = useState<AssignResult[]>([]);
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
+  const [applicationNo, setApplicationNo] = useState<string>('');
 
-  const { registerVolunteer, matchVolunteerToStation, venues } = useAppStore();
+  const { registerVolunteer } = useAppStore();
   const { showToast } = useToast();
 
   const defaultValues: FormValues = {
@@ -88,7 +104,7 @@ export default function VolunteerRegister() {
     watch,
     setValue,
     trigger,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues,
@@ -172,34 +188,6 @@ export default function VolunteerRegister() {
   };
 
   const performMatching = (data: FormValues): AssignResult[] => {
-    const tempVolunteer: Volunteer = {
-      id: 'temp',
-      username: 'temp',
-      role: 'volunteer',
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-      skills: data.skills,
-      availableSlots: data.availableDates.flatMap((date) =>
-        data.availableTimeSlots.map((timeSlot) => {
-          const timeMap: Record<string, { start: string; end: string }> = {
-            morning: { start: '08:00', end: '12:00' },
-            afternoon: { start: '12:00', end: '18:00' },
-            evening: { start: '18:00', end: '22:00' },
-          };
-          return {
-            date,
-            startTime: timeMap[timeSlot].start,
-            endTime: timeMap[timeSlot].end,
-          } as TimeSlot;
-        })
-      ),
-      checkIns: [],
-      totalServiceHours: 0,
-    };
-
     const results: AssignResult[] = [];
     for (const station of stations) {
       const matchedSkills = data.skills.filter((s) => station.requiredSkills.includes(s));
@@ -262,16 +250,37 @@ export default function VolunteerRegister() {
       totalServiceHours: 0,
     });
 
+    const newApplicationNo = generateApplicationNo();
+    setApplicationNo(newApplicationNo);
     setRegisteredVolunteer(newVolunteer);
     setShowMatchResult(false);
     setShowSuccess(true);
     showToast('success', '注册申请已提交，请等待审核');
   };
 
+  const handleDownloadCertificate = async () => {
+    try {
+      showToast('info', '正在生成PDF凭证，请稍候...');
+      await exportToPDF('volunteer-application-form', `志愿者申请凭证-${applicationNo}`);
+      showToast('success', '凭证下载成功');
+    } catch (error) {
+      console.error('PDF生成失败:', error);
+      showToast('error', '凭证下载失败，请重试');
+    }
+  };
+
   const getMatchColor = (score: number) => {
     if (score >= 80) return 'text-green-600 bg-green-100';
     if (score >= 60) return 'text-blue-600 bg-blue-100';
     return 'text-amber-600 bg-amber-100';
+  };
+
+  const handleBack = () => {
+    if (isPublic) {
+      navigate('/login');
+    } else {
+      navigate(-1);
+    }
   };
 
   const renderStepContent = () => {
@@ -603,15 +612,92 @@ export default function VolunteerRegister() {
   const formData = watch();
 
   return (
-    <div className="min-h-screen">
-      <PageHeader
-        title="志愿者注册"
-        description="填写个人信息，完成志愿者注册流程"
-        icon={LucideIcons.HeartHandshake}
-        showBackButton
-      />
+    <div className={cn(
+      "min-h-screen",
+      isPublic ? "bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900" : ""
+    )}>
+      {isPublic ? (
+        <>
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-amber-400/20 to-transparent rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-tl from-blue-500/20 to-transparent rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+          </div>
 
-      <div className="max-w-5xl mx-auto">
+          <div className="relative z-10">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+              <button
+                onClick={handleBack}
+                className="flex items-center gap-2 px-4 py-2 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+              >
+                <LucideIcons.ArrowLeft className="w-4 h-4" />
+                <span className="font-medium">返回登录</span>
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center">
+                  <LucideIcons.Trophy className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-white font-bold text-lg">2026 国际体育盛会</span>
+              </div>
+              <div className="w-24" />
+            </div>
+
+            <div className="text-center py-8">
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-pink-400 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg shadow-pink-500/30"
+              >
+                <LucideIcons.HeartHandshake className="w-10 h-10 text-white" />
+              </motion.div>
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                className="text-4xl font-bold text-white mb-2"
+              >
+                志愿者注册
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="text-xl text-amber-400 font-medium mb-3"
+              >
+                加入我们，共襄盛举
+              </motion.p>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="flex flex-wrap justify-center gap-2"
+              >
+                {['热情服务', '传递微笑', '成就精彩'].map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-white/70 text-sm border border-white/10"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </motion.div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <PageHeader
+          title="志愿者注册"
+          description="填写个人信息，完成志愿者注册流程"
+          icon={LucideIcons.HeartHandshake}
+          showBackButton
+          backPath={isPublic ? '/login' : undefined}
+        />
+      )}
+
+      <div className={cn(
+        "max-w-5xl mx-auto",
+        isPublic ? "relative z-10 pb-12" : ""
+      )}>
         <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
           <div className="border-b border-gray-100 px-6 py-4">
             <div className="flex items-center justify-between">
@@ -817,7 +903,7 @@ export default function VolunteerRegister() {
       <Modal
         isOpen={showSuccess}
         onClose={() => setShowSuccess(false)}
-        className="max-w-md"
+        className="max-w-lg"
       >
         <div className="text-center py-6 px-6">
           <motion.div
@@ -836,73 +922,276 @@ export default function VolunteerRegister() {
 
           {registeredVolunteer && (
             <div className="bg-gray-50 rounded-2xl p-5 mb-6 text-left">
-              <div className="flex items-center gap-4 mb-4">
-                <img
-                  src={registeredVolunteer.avatar}
-                  alt={registeredVolunteer.name}
-                  className="w-16 h-16 rounded-2xl object-cover"
-                />
-                <div>
-                  <h4 className="font-bold text-gray-900 text-lg">
-                    {registeredVolunteer.name}
-                  </h4>
-                  <p className="text-sm text-gray-500">
-                    {registeredVolunteer.email}
-                  </p>
+              <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={registeredVolunteer.avatar}
+                    alt={registeredVolunteer.name}
+                    className="w-14 h-14 rounded-xl object-cover"
+                  />
+                  <div>
+                    <h4 className="font-bold text-gray-900">
+                      {registeredVolunteer.name}
+                    </h4>
+                    <p className="text-sm text-gray-500">
+                      {registeredVolunteer.email}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-amber-100 text-amber-700 text-sm font-medium rounded-full flex items-center gap-1">
+                  <LucideIcons.Clock className="w-3 h-3" />
+                  待审核
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="bg-white rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <LucideIcons.FileText className="w-4 h-4" />
+                      <span className="text-sm">申请编号</span>
+                    </div>
+                    <span className="font-mono font-bold text-primary-600">{applicationNo}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white rounded-xl p-3">
+                    <p className="text-xs text-gray-500 mb-1">登录账号</p>
+                    <p className="font-bold text-gray-900">{registeredVolunteer.phone}</p>
+                  </div>
+                  <div className="bg-white rounded-xl p-3">
+                    <p className="text-xs text-gray-500 mb-1">初始密码</p>
+                    <p className="font-bold text-gray-900">123456</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white rounded-xl p-3">
+                    <p className="text-xs text-gray-500 mb-1">技能特长</p>
+                    <div className="flex flex-wrap gap-1">
+                      {registeredVolunteer.skills.slice(0, 2).map((s) => {
+                        const skill = skillOptions.find((opt) => opt.value === s);
+                        return (
+                          <span
+                            key={s}
+                            className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs rounded-full"
+                          >
+                            {skill?.label || s}
+                          </span>
+                        );
+                      })}
+                      {registeredVolunteer.skills.length > 2 && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          +{registeredVolunteer.skills.length - 2}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl p-3">
+                    <p className="text-xs text-gray-500 mb-1">可服务天数</p>
+                    <p className="font-bold text-primary-600">
+                      {registeredVolunteer.availableSlots.length} 天
+                    </p>
+                  </div>
+                </div>
+
+                {registeredVolunteer.assignedStation && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                    <div className="flex items-center gap-2 text-green-700">
+                      <LucideIcons.MapPin className="w-4 h-4" />
+                      <span className="font-medium">
+                        已匹配岗位：{stations.find((s) => s.id === registeredVolunteer.assignedStation)?.name}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <div className="flex items-start gap-2">
+                    <LucideIcons.Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium mb-1">审核时间说明</p>
+                      <p className="text-blue-600">预计1-3个工作日完成审核，审核通过后您可以使用上述账号密码登录系统，查看申请详情和服务安排。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleDownloadCertificate}
+              className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 border-2 border-primary-500 text-primary-600 rounded-xl font-medium hover:bg-primary-50 transition-colors"
+            >
+              <LucideIcons.Download className="w-4 h-4" />
+              下载凭证
+            </button>
+            <button
+              onClick={() => {
+                setShowSuccess(false);
+                if (isPublic) {
+                  navigate('/login');
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
+            >
+              完成
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <div id="volunteer-application-form" className="hidden">
+        <div className="bg-white p-8 w-[800px]">
+          <div className="text-center mb-8 pb-6 border-b-2 border-gray-200">
+            <div className="w-16 h-16 bg-gradient-to-br from-pink-400 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <span className="text-white text-2xl">❤️</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">2026 国际体育盛会</h1>
+            <h2 className="text-2xl font-bold text-gray-800">志愿者申请表</h2>
+            <p className="text-gray-500 mt-2">Volunteer Application Form</p>
+          </div>
+
+          {registeredVolunteer && (
+            <>
+              <div className="mb-6 p-4 bg-gray-50 rounded-xl">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">申请编号</p>
+                    <p className="font-mono font-bold text-lg text-primary-600">{applicationNo}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">申请日期</p>
+                    <p className="font-bold text-lg">{formatDate(new Date(), 'yyyy年MM月dd日')}</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-xl p-3">
-                  <p className="text-xs text-gray-500 mb-1">技能</p>
-                  <div className="flex flex-wrap gap-1">
-                    {registeredVolunteer.skills.slice(0, 3).map((s) => {
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">基本信息</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">姓名</p>
+                    <p className="font-semibold">{registeredVolunteer.name}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">性别</p>
+                    <p className="font-semibold">{formData.gender === 'male' ? '男' : '女'}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">出生日期</p>
+                    <p className="font-semibold">{formData.birthDate}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">身份证号</p>
+                    <p className="font-semibold">{formData.idCard}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">联系电话</p>
+                    <p className="font-semibold">{registeredVolunteer.phone}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">电子邮箱</p>
+                    <p className="font-semibold">{registeredVolunteer.email}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">技能特长</h3>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex flex-wrap gap-2">
+                    {registeredVolunteer.skills.map((s) => {
                       const skill = skillOptions.find((opt) => opt.value === s);
                       return (
                         <span
                           key={s}
-                          className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs rounded-full"
+                          className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full font-medium"
                         >
                           {skill?.label || s}
                         </span>
                       );
                     })}
-                    {registeredVolunteer.skills.length > 3 && (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">
-                        +{registeredVolunteer.skills.length - 3}
-                      </span>
-                    )}
                   </div>
                 </div>
-                <div className="bg-white rounded-xl p-3">
-                  <p className="text-xs text-gray-500 mb-1">可服务天数</p>
-                  <p className="font-bold text-primary-600">
-                    {registeredVolunteer.availableSlots.length} 天
-                  </p>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">可用时段</h3>
+                <div className="space-y-3">
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-2">服务日期（共 {formData.availableDates.length} 天）</p>
+                    <div className="flex flex-wrap gap-2">
+                      {formData.availableDates.map((date) => (
+                        <span key={date} className="px-2 py-1 bg-white border border-gray-200 rounded text-sm">
+                          {formatDate(date, 'MM月dd日')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-2">服务时段（共 {formData.availableTimeSlots.length} 个时段）</p>
+                    <div className="flex flex-wrap gap-2">
+                      {formData.availableTimeSlots.map((slot) => {
+                        const slotInfo = timeSlots.find((s) => s.value === slot);
+                        return (
+                          <span key={slot} className="px-2 py-1 bg-white border border-gray-200 rounded text-sm">
+                            {slotInfo?.label || slot}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {registeredVolunteer.assignedStation && (
-                <div className="mt-3 bg-green-50 border border-green-200 rounded-xl p-3">
-                  <div className="flex items-center gap-2 text-green-700">
-                    <LucideIcons.MapPin className="w-4 h-4" />
-                    <span className="font-medium">
-                      已匹配岗位：{stations.find((s) => s.id === registeredVolunteer.assignedStation)?.name}
-                    </span>
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4 pb-2 border-b border-gray-200">匹配岗位</h3>
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-green-700 font-semibold">
+                      📍 {stations.find((s) => s.id === registeredVolunteer.assignedStation)?.name}
+                    </p>
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          <button
-            onClick={() => setShowSuccess(false)}
-            className="w-full px-5 py-2.5 bg-primary-500 text-white rounded-xl font-medium hover:bg-primary-600 transition-colors"
-          >
-            完成
-          </button>
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg mb-6">
+                <p className="text-amber-800 font-medium mb-1">审核状态</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></span>
+                  <span className="font-semibold text-amber-700">待审核</span>
+                  <span className="text-amber-600 text-sm">（预计1-3个工作日）</span>
+                </div>
+              </div>
+
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-blue-800 font-medium mb-2">登录信息</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-blue-600">登录账号</p>
+                    <p className="font-mono font-bold text-blue-800">{registeredVolunteer.phone}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-blue-600">初始密码</p>
+                    <p className="font-mono font-bold text-blue-800">123456</p>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-600 mt-3">
+                  审核通过后，您可以使用上述账号登录系统，查看申请详情和服务安排。
+                </p>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+                <p className="text-gray-500 text-sm">2026 国际体育盛会组委会 · 志愿者部</p>
+                <p className="text-gray-400 text-xs mt-1">本申请表由系统自动生成，具有唯一标识</p>
+              </div>
+            </>
+          )}
         </div>
-      </Modal>
+      </div>
     </div>
   );
 }

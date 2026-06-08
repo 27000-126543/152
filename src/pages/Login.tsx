@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import * as LucideIcons from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { useToast } from '@/components/Toast';
 import { getRoleName, getRoleIcon } from '@/utils';
@@ -297,21 +297,21 @@ export default function Login() {
               transition={{ duration: 0.5, delay: 0.8 }}
               className="flex items-center justify-center gap-6 pt-6 border-t border-slate-200"
             >
-              <a
-                href="#"
+              <Link
+                to="/public/athlete-register"
                 className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
               >
                 <LucideIcons.UserPlus className="w-4 h-4" />
                 <span>运动员注册</span>
-              </a>
+              </Link>
               <div className="w-px h-4 bg-slate-300" />
-              <a
-                href="#"
+              <Link
+                to="/public/volunteer-register"
                 className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
               >
                 <LucideIcons.HeartHandshake className="w-4 h-4" />
                 <span>志愿者注册</span>
-              </a>
+              </Link>
             </motion.div>
           </div>
 
